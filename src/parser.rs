@@ -3,6 +3,7 @@ use crate::iter::MultiPeek;
 use crate::lexer::{TokenIterator, Token, TokenKind as TK};
 use crate::position::Position;
 use std::collections::BTreeMap;
+use std::rc::Rc;
 
 use ExprKind as EK;
 
@@ -32,15 +33,14 @@ pub enum ExprKind {
 
     // Primary:
     Identifier(String),
-    Function(FunctionDef),
+    Function(Rc<FunctionDef>),
+    Boolean(bool),
     Number(f64),
     String(String),
     Array(Vec<Expr>),
     Object(BTreeMap<String, Expr>),
-    Paren(Box<Expr>),
-    True,
-    False,
     Null,
+    Paren(Box<Expr>),
     If(Vec<(Expr, Block)>, Option<Block>),
     Try(Block, (String, Block)),
     While(Box<Expr>, Block),
@@ -66,10 +66,6 @@ pub enum ExprKind {
     LessThanEqual(Box<Expr>, Box<Expr>),
     GreaterThan(Box<Expr>, Box<Expr>),
     GreaterThanEqual(Box<Expr>, Box<Expr>),
-    // TODO: Fails if both operands are not numbers. No funny shit.
-    //
-    // ...Well, maybe `+` can handle string concatenation. And the boolean operators can work on
-    // anything.
     Add(Box<Expr>, Box<Expr>),
     Subtract(Box<Expr>, Box<Expr>),
     Multiply(Box<Expr>, Box<Expr>),
@@ -85,7 +81,6 @@ pub enum ExprKind {
     BitXor(Box<Expr>, Box<Expr>),
 
     // Binary (assignment):
-    // TODO: Fails if lval isn't `Identifier`, `Index`, or `Dot`
     Assign(Box<Expr>, Box<Expr>),
     LeftShiftAssign(Box<Expr>, Box<Expr>),
     RightShiftAssign(Box<Expr>, Box<Expr>),
@@ -256,8 +251,8 @@ fn parse_primary<'a>(parser: &mut Parser<'a>) -> Result<Expr, Error> {
         Some(TK::Number(value)) => EK::Number(value),
         Some(TK::String(value)) => EK::String(value),
         Some(TK::Identifier(ident)) => EK::Identifier(ident),
-        Some(TK::True) => EK::True,
-        Some(TK::False) => EK::False,
+        Some(TK::True) => EK::Boolean(true),
+        Some(TK::False) => EK::Boolean(false),
         Some(TK::Null) => EK::Null,
         Some(TK::Pipe) => parse_function(parser, false)?,
         Some(TK::Or) => parse_function(parser, true)?,
@@ -452,7 +447,7 @@ fn parse_function<'a>(parser: &mut Parser<'a>, skip_params: bool) -> Result<EK, 
         parse_expr(parser)?
     };
 
-    Ok(EK::Function(FunctionDef { params, body: Box::new(body) }))
+    Ok(EK::Function(Rc::new(FunctionDef { params, body: Box::new(body) })))
 }
 
 fn is_next_curly_pair<'a>(parser: &mut Parser<'a>) -> Result<bool, Error> {

@@ -76,3 +76,4 @@ std.iter(array);
 
 * The evaluator (`Context`) frequently clones syntax trees (`Expr`s) for e.g. repeated evaluations of function blocks or loop conditions. Is this the best way to go, or is there some optimization that can be made?
 * String interning would be nice.
+* Eventually we'll need a `this` analog for function scopes.

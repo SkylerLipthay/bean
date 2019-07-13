@@ -68,8 +68,16 @@ impl Value {
         Value::String(ImmutableString::new(string))
     }
 
-    pub fn function(def: FunctionDef) -> Value {
-        Value::Function(Function(Rc::new(def)))
+    pub fn function(def: Rc<FunctionDef>) -> Value {
+        Value::Function(Function(def))
+    }
+
+    pub fn array(values: Vec<Value>) -> Value {
+        Value::Array(Array(Rc::new(RefCell::new(values))))
+    }
+
+    pub fn object(values: BTreeMap<String, Value>) -> Value {
+        Value::Object(Object(Rc::new(RefCell::new(values))))
     }
 
     pub fn coerce_bool(&self) -> bool {
@@ -88,6 +96,14 @@ impl ImmutableString {
     pub fn new(string: String) -> ImmutableString {
         ImmutableString(Rc::new(string))
     }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+
+    pub fn to_string(&self) -> String {
+        self.0.to_string()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -102,15 +118,43 @@ impl Function {
 #[derive(Clone, Debug)]
 pub struct Array(Rc<RefCell<Vec<Value>>>);
 
+impl Array {
+    pub fn new() -> Array {
+        Array(Rc::new(RefCell::new(Vec::new())))
+    }
+
+    pub fn set(&self, index: usize, value: Value) {
+        let mut vec = self.0.borrow_mut();
+        let len = vec.len();
+        if index >= len {
+            vec.reserve(index - len + 1);
+            for _ in len..=index {
+                vec.push(Value::Null);
+            }
+        }
+
+        vec[index] = value;
+    }
+
+    pub fn get(&self, index: usize) -> Option<Value> {
+        self.0.borrow().get(index).cloned()
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Object(Rc<RefCell<BTreeMap<String, Value>>>);
 
+// TODO: Allow for storing hidden values accessible only in Rust.
 impl Object {
     pub fn new() -> Object {
         Object(Rc::new(RefCell::new(BTreeMap::new())))
     }
 
-    pub fn insert(&self, key: String, value: Value) -> Option<Value> {
-        self.0.borrow_mut().insert(key, value)
+    pub fn set(&self, key: String, value: Value) {
+        self.0.borrow_mut().insert(key, value);
+    }
+
+    pub fn get(&self, key: &str) -> Option<Value> {
+        self.0.borrow().get(key).cloned()
     }
 }

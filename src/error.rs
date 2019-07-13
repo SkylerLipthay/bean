@@ -33,11 +33,51 @@ impl Error {
         Error::runtime(pos, "`return` used outside a function".into())
     }
 
+    pub fn bad_iter(pos: Position) -> Value {
+        Error::runtime(pos, "expected an iterator object with a `next` function".into())
+    }
+
+    pub fn bad_iter_next(pos: Position) -> Value {
+        Error::runtime(pos, "expected iterator's `next` to return an object".into())
+    }
+
+    pub fn invalid_operands(pos: Position) -> Value {
+        Error::runtime(pos, "invalid operands for operation".into())
+    }
+
+    pub fn invalid_operand(pos: Position) -> Value {
+        Error::runtime(pos, "invalid operand for operation".into())
+    }
+
+    pub fn invalid_assign_lhs(pos: Position) -> Value {
+        Error::runtime(pos, "invalid assignment left-hand side".into())
+    }
+
+    pub fn non_string_object_key(pos: Position) -> Value {
+        Error::runtime(pos, "object key must be a string".into())
+    }
+
+    pub fn non_numeric_array_index(pos: Position) -> Value {
+        Error::runtime(pos, "array index must be a number".into())
+    }
+
+    pub fn negative_array_index(pos: Position) -> Value {
+        Error::runtime(pos, "array index cannot be negative".into())
+    }
+
+    pub fn invalid_indexee(pos: Position) -> Value {
+        Error::runtime(pos, "only arrays and objects can be indexed".into())
+    }
+
+    pub fn invalid_dot(pos: Position) -> Value {
+        Error::runtime(pos, "dot operator can only be used on objects".into())
+    }
+
     pub fn runtime(pos: Position, message: String) -> Value {
         let object = Object::new();
-        object.insert("message".into(), Value::string(message));
-        object.insert("line".into(), Value::Number(pos.line as f64));
-        object.insert("column".into(), Value::Number(pos.column as f64));
+        object.set("message".into(), Value::string(message));
+        object.set("line".into(), Value::Number(pos.line as f64));
+        object.set("column".into(), Value::Number(pos.column as f64));
         Value::Object(object)
     }
 }
