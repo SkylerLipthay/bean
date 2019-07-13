@@ -6,21 +6,21 @@ use std::collections::BTreeMap;
 
 use ExprKind as EK;
 
-#[derive(Debug)]
-pub struct Function {
+#[derive(Clone, Debug)]
+pub struct FunctionDef {
     pub params: Vec<String>,
     pub body: Box<Expr>,
 }
 
 pub type Block = Vec<Expr>;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Expr {
-    kind: ExprKind,
-    position: Position,
+    pub kind: ExprKind,
+    pub position: Position,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum ExprKind {
     // Statement-like (can only appear in a semicolon-delimited list of expressions; require
     // semicolon afterwards):
@@ -32,7 +32,7 @@ pub enum ExprKind {
 
     // Primary:
     Identifier(String),
-    Function(Function),
+    Function(FunctionDef),
     Number(f64),
     String(String),
     Array(Vec<Expr>),
@@ -68,7 +68,8 @@ pub enum ExprKind {
     GreaterThanEqual(Box<Expr>, Box<Expr>),
     // TODO: Fails if both operands are not numbers. No funny shit.
     //
-    // ...Well, maybe `+` can handle string concatenation.
+    // ...Well, maybe `+` can handle string concatenation. And the boolean operators can work on
+    // anything.
     Add(Box<Expr>, Box<Expr>),
     Subtract(Box<Expr>, Box<Expr>),
     Multiply(Box<Expr>, Box<Expr>),
@@ -130,7 +131,7 @@ impl<'a> Parser<'a> {
             Some(Ok(Token { ref kind, .. })) => {
                 Ok(Some(kind))
             },
-            Some(Err(err)) => Err(*err),
+            Some(Err(err)) => Err(err.clone()),
             None => Ok(None),
         }
     }
@@ -335,7 +336,7 @@ fn parse_if<'a>(parser: &mut Parser<'a>) -> Result<EK, Error> {
         clauses.push((parse_expr(parser)?, parse_block(parser)?));
 
         if let Some(TK::Else) = parser.peek_token(0)? {
-                parser.next_token()?;
+            parser.next_token()?;
         } else {
             break;
         }
@@ -343,7 +344,6 @@ fn parse_if<'a>(parser: &mut Parser<'a>) -> Result<EK, Error> {
         if let Some(TK::If) = parser.peek_token(0)? {
             parser.next_token()?;
         } else {
-            parser.next_token()?;
             else_block = Some(parse_block(parser)?);
             break;
         }
@@ -452,7 +452,7 @@ fn parse_function<'a>(parser: &mut Parser<'a>, skip_params: bool) -> Result<EK, 
         parse_expr(parser)?
     };
 
-    Ok(EK::Function(Function { params, body: Box::new(body) }))
+    Ok(EK::Function(FunctionDef { params, body: Box::new(body) }))
 }
 
 fn is_next_curly_pair<'a>(parser: &mut Parser<'a>) -> Result<bool, Error> {
@@ -561,19 +561,19 @@ fn parse_unary<'a>(parser: &mut Parser<'a>) -> Result<Expr, Error> {
     let kind = match parser.peek_token(0)? {
         Some(TK::Minus) => {
             parser.next_token()?;
-            EK::Negative(Box::new(parse_primary(parser)?))
+            EK::Negative(Box::new(parse_unary(parser)?))
         },
         Some(TK::Plus) => {
             parser.next_token()?;
-            EK::Positive(Box::new(parse_primary(parser)?))
+            EK::Positive(Box::new(parse_unary(parser)?))
         },
         Some(TK::Bang) => {
             parser.next_token()?;
-            EK::BoolNot(Box::new(parse_primary(parser)?))
+            EK::BoolNot(Box::new(parse_unary(parser)?))
         },
         Some(TK::Tilde) => {
             parser.next_token()?;
-            EK::BitNegate(Box::new(parse_primary(parser)?))
+            EK::BitNegate(Box::new(parse_unary(parser)?))
         },
         _ => return parse_primary(parser),
     };
@@ -630,7 +630,8 @@ fn parse_binary<'a>(parser: &mut Parser<'a>, prev_prec: i8, mut lhs: Expr) -> Re
             break;
         }
 
-        // We can `unwrap()` here because a next token is guaranteed to exist.
+        // We can `unwrap()` here because a next token is guaranteed to exist; if `peek_token()`
+        // returned `None`, we would not be here.
         let operator = parser.next_token()?.unwrap();
         let position = parser.prev_pos;
         let mut rhs = parse_unary(parser)?;

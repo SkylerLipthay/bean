@@ -73,3 +73,6 @@ std.iter(array);
 * Perhaps scopes can be defined like `struct Scope { kind: ScopeKind, namespace: Object<'ctx> }`?
 
 * Can't impose a memory allocation limitation on a script's execution context until Rust's custom allocator story is mature. (Unless I want to re-implement `String`, `Vec`, `BTreeMap`...)
+
+* The evaluator (`Context`) frequently clones syntax trees (`Expr`s) for e.g. repeated evaluations of function blocks or loop conditions. Is this the best way to go, or is there some optimization that can be made?
+* String interning would be nice.
