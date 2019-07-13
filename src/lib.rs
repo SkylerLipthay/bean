@@ -1,3 +1,7 @@
+#[macro_use]
+extern crate gc_derive;
+extern crate gc;
+
 pub mod context;
 pub mod error;
 pub mod iter;

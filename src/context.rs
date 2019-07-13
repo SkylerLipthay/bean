@@ -74,8 +74,8 @@ macro_rules! op_inequality {
                     if let Value::Number(b) = b {
                         return Ok(Value::Boolean(a $operator b));
                     }
-                } else if let Value::String(a) = a {
-                    if let Value::String(b) = b {
+                } else if let Value::String(ref a) = a {
+                    if let Value::String(ref b) = b {
                         return Ok(Value::Boolean(a.as_str() $operator b.as_str()));
                     }
                 }
@@ -214,14 +214,14 @@ impl Context {
 
     fn eval_dot(&mut self, pos: Position, expr: &Expr, ident: &String) -> Result<Value, Interrupt> {
         match self.eval_expr(expr)? {
-            Value::Object(object) => Ok(object.get(ident).unwrap_or(Value::Null)),
+            Value::Object(ref object) => Ok(object.get(ident).unwrap_or(Value::Null)),
             _ => Err(Interrupt::Error(Error::invalid_dot(pos))),
         }
     }
 
     fn eval_object_index(&mut self, pos: Position, e: &Expr) -> Result<ImmutableString, Interrupt> {
         match self.eval_expr(e)? {
-            Value::String(key) => Ok(key),
+            Value::String(ref key) => Ok(key.clone()),
             _ => Err(Interrupt::Error(Error::non_string_object_key(pos))),
         }
     }
@@ -236,10 +236,10 @@ impl Context {
 
     fn eval_index(&mut self, pos: Position, expr: &Expr, key: &Expr) -> Result<Value, Interrupt> {
         match self.eval_expr(expr)? {
-            Value::Object(object) => {
+            Value::Object(ref object) => {
                 Ok(object.get(&self.eval_object_index(pos, key)?.as_str()).unwrap_or(Value::Null))
             },
-            Value::Array(array) => {
+            Value::Array(ref array) => {
                 Ok(array.get(self.eval_array_index(pos, key)?).unwrap_or(Value::Null))
             },
             _ => return Err(Interrupt::Error(Error::invalid_indexee(expr.position))),
@@ -255,24 +255,24 @@ impl Context {
                 Ok(value)
             },
             EK::Dot(expr, ident) => {
-                let object = match self.eval_expr(expr)? {
-                    Value::Object(object) => object,
-                    _ => return Err(Interrupt::Error(Error::invalid_dot(lhs.position))),
-                };
-
-                let value = self.eval_expr(rhs)?;
-                object.set(ident.clone(), value.clone());
-                Ok(value)
+                match self.eval_expr(expr)? {
+                    Value::Object(ref object) => {
+                        let value = self.eval_expr(rhs)?;
+                        object.set(ident.clone(), value.clone());
+                        Ok(value)
+                    },
+                    _ => Err(Interrupt::Error(Error::invalid_dot(lhs.position))),
+                }
             },
             EK::Index(expr, key) => {
                 match self.eval_expr(expr)? {
-                    Value::Object(object) => {
+                    Value::Object(ref object) => {
                         let key = self.eval_object_index(expr.position, key)?.to_string();
                         let value = self.eval_expr(rhs)?;
                         object.set(key, value.clone());
                         Ok(value)
                     },
-                    Value::Array(array) => {
+                    Value::Array(ref array) => {
                         let index = self.eval_array_index(expr.position, key)?;
                         let value = self.eval_expr(rhs)?;
                         array.set(index, value.clone());
@@ -303,8 +303,8 @@ impl Context {
             if let Value::Number(b) = b {
                 return Ok(Value::Number(a + b));
             }
-        } else if let Value::String(a) = a {
-            if let Value::String(b) = b {
+        } else if let Value::String(ref a) = a {
+            if let Value::String(ref b) = b {
                 return Ok(Value::string(a.as_str().to_string() + b.as_str()));
             }
         }
@@ -392,21 +392,24 @@ impl Context {
 
         let mut result = Value::Null;
 
-        let iter = match self.eval_expr(iter)? {
-            Value::Object(iter) => iter,
+        let iter_expr = self.eval_expr(iter)?;
+        let iter = match iter_expr {
+            Value::Object(ref iter) => iter,
             _ => return Err(Interrupt::Error(Error::bad_iter(position))),
         };
 
-        let next = match iter.get("next") {
-            Some(Value::Function(next)) => next,
+        let next_val = iter.get("next");
+        let next = match next_val {
+            Some(Value::Function(ref next)) => next,
             _ => return Err(Interrupt::Error(Error::bad_iter(position))),
         };
 
         let args = Vec::new();
 
         loop {
-            let object = match self.eval_call_inner(&next, &args)? {
-                Value::Object(object) => object,
+            let object_val = self.eval_call_inner(next, &args)?;
+            let object = match object_val {
+                Value::Object(ref object) => object,
                 _ => return Err(Interrupt::Error(Error::bad_iter_next(position))),
             };
 
@@ -485,8 +488,8 @@ impl Context {
         // to disambiguate, or come up with another solution. Perhaps if no filename is supplied,
         // the error is "localized" to the caller's location (i.e. the line/column point to `pos`).
         let func = self.eval_expr(func)?;
-        if let Value::Function(func) = func {
-            self.eval_call_inner(&func, args)
+        if let Value::Function(ref func) = func {
+            self.eval_call_inner(func, args)
         } else {
             Err(Interrupt::Error(Error::not_a_function(pos)))
         }

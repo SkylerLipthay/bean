@@ -1,16 +1,16 @@
 use crate::parser::FunctionDef;
-use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
+use gc::{Gc, GcCell};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Trace, Finalize)]
 pub enum Value {
     Number(f64),
-    String(ImmutableString),
+    String(#[unsafe_ignore_trace] ImmutableString),
     Boolean(bool),
     Array(Array),
     Object(Object),
-    Function(Function),
+    Function(#[unsafe_ignore_trace] Function),
     Null,
 }
 
@@ -37,13 +37,13 @@ impl PartialEq<Value> for Value {
             },
             Value::Array(a) => {
                 match other {
-                    Value::Array(b) => Rc::ptr_eq(&a.0, &b.0),
+                    Value::Array(b) => (&*a.0 as *const _) == (&*b.0 as *const _),
                     _ => false,
                 }
             },
             Value::Object(a) => {
                 match other {
-                    Value::Object(b) => Rc::ptr_eq(&a.0, &b.0),
+                    Value::Object(b) => (&*a.0 as *const _) == (&*b.0 as *const _),
                     _ => false,
                 }
             },
@@ -73,11 +73,11 @@ impl Value {
     }
 
     pub fn array(values: Vec<Value>) -> Value {
-        Value::Array(Array(Rc::new(RefCell::new(values))))
+        Value::Array(Array(Gc::new(GcCell::new(values))))
     }
 
     pub fn object(values: BTreeMap<String, Value>) -> Value {
-        Value::Object(Object(Rc::new(RefCell::new(values))))
+        Value::Object(Object(Gc::new(GcCell::new(values))))
     }
 
     pub fn coerce_bool(&self) -> bool {
@@ -115,12 +115,12 @@ impl Function {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct Array(Rc<RefCell<Vec<Value>>>);
+#[derive(Clone, Debug, Trace, Finalize)]
+pub struct Array(Gc<GcCell<Vec<Value>>>);
 
 impl Array {
     pub fn new() -> Array {
-        Array(Rc::new(RefCell::new(Vec::new())))
+        Array(Gc::new(GcCell::new(Vec::new())))
     }
 
     pub fn set(&self, index: usize, value: Value) {
@@ -141,13 +141,13 @@ impl Array {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct Object(Rc<RefCell<BTreeMap<String, Value>>>);
+#[derive(Clone, Debug, Trace, Finalize)]
+pub struct Object(Gc<GcCell<BTreeMap<String, Value>>>);
 
 // TODO: Allow for storing hidden values accessible only in Rust.
 impl Object {
     pub fn new() -> Object {
-        Object(Rc::new(RefCell::new(BTreeMap::new())))
+        Object(Gc::new(GcCell::new(BTreeMap::new())))
     }
 
     pub fn set(&self, key: String, value: Value) {
