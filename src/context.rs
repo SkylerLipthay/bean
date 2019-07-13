@@ -1,11 +1,12 @@
 use crate::error::Error;
 use crate::parser::{Block, Expr, ExprKind as EK, Parser};
 use crate::position::Position;
-use crate::value::{ImmutableString, Function, Value};
+use crate::value::{ImmutableString, Function, Object, Value};
 use std::collections::BTreeMap;
+use std::mem;
 
 pub struct Context {
-    scopes: Vec<Scope>,
+    scopes: Vec<Object>,
 }
 
 macro_rules! loop_body {
@@ -120,7 +121,7 @@ impl Context {
     }
 
     fn eval_block(&mut self, block: &Block) -> Result<Value, Interrupt> {
-        self.scopes.push(Scope::new());
+        self.scopes.push(Object::new());
         let result = self.eval_block_no_scope(block);
         self.scopes.pop();
         result
@@ -151,7 +152,7 @@ impl Context {
             EK::Let(ident, value) => self.eval_let(pos, ident, value),
 
             EK::Identifier(ident) => self.eval_identifier(pos, ident),
-            EK::Function(def) => Ok(Value::function(def.clone())),
+            EK::Function(def) => Ok(Value::function(self.scopes.clone(), def.clone())),
             EK::Boolean(value) => Ok(Value::Boolean(*value)),
             EK::Number(value) => Ok(Value::Number(*value)),
             EK::String(value) => Ok(Value::string(value.clone())),
@@ -251,7 +252,7 @@ impl Context {
             EK::Identifier(ident) => {
                 let scope_index = self.resolve_scope_index(lhs.position, ident)?;
                 let value = self.eval_expr(rhs)?;
-                self.scopes[scope_index].locals.insert(ident.clone(), value.clone());
+                self.scopes[scope_index].set(ident.clone(), value.clone());
                 Ok(value)
             },
             EK::Dot(expr, ident) => {
@@ -287,7 +288,7 @@ impl Context {
 
     fn resolve_scope_index(&self, pos: Position, ident: &String) -> Result<usize, Interrupt> {
         for (index, scope) in self.scopes.iter().enumerate().rev() {
-            if scope.locals.contains_key(ident) {
+            if scope.contains(ident) {
                 return Ok(index);
             }
         }
@@ -419,8 +420,8 @@ impl Context {
                 break;
             }
 
-            let mut scope = Scope::new();
-            scope.locals.insert(ident.clone(), value);
+            let scope = Object::new();
+            scope.set(ident.clone(), value);
             self.scopes.push(scope);
             let inner_result = inner(self, block);
             self.scopes.pop();
@@ -452,8 +453,8 @@ impl Context {
             Err(interrupt) => return Err(interrupt),
         };
 
-        let mut scope = Scope::new();
-        scope.locals.insert(ident.clone(), err);
+        let scope = Object::new();
+        scope.set(ident.clone(), err);
         self.scopes.push(scope);
         let result = self.eval_block_no_scope(catch);
         self.scopes.pop();
@@ -496,15 +497,19 @@ impl Context {
     }
 
     fn eval_call_inner(&mut self, func: &Function, args: &Vec<Expr>) -> Result<Value, Interrupt> {
-        let mut scope = Scope::new();
+        let scope = Object::new();
         for (index, param) in func.def().params.iter().enumerate() {
             let arg = match args.get(index) {
                 Some(expr) => self.eval_expr(expr)?,
                 None => Value::Null,
             };
-            scope.locals.insert(param.clone(), arg);
+            scope.set(param.clone(), arg);
         }
+
+        // Restore the original scope stack at the declaration site of the function:
+        let ctx_scopes = mem::replace(&mut self.scopes, func.scopes().to_vec());
         self.scopes.push(scope);
+
         let result = match self.eval_expr(&func.def().body) {
             Ok(value) => Ok(value),
             Err(Interrupt::Return { value, .. }) => Ok(match value {
@@ -519,7 +524,9 @@ impl Context {
             },
             Err(err) => Err(err),
         };
-        self.scopes.pop();
+
+        self.scopes = ctx_scopes;
+
         result
     }
 
@@ -553,7 +560,7 @@ impl Context {
 
     fn eval_identifier(&mut self, pos: Position, ident: &String) -> Result<Value, Interrupt> {
         for scope in self.scopes.iter().rev() {
-            if let Some(value) = scope.locals.get(ident) {
+            if let Some(value) = scope.get(ident) {
                 return Ok(value.clone());
             }
         }
@@ -567,7 +574,7 @@ impl Context {
         ident: &String,
         expr: &Option<Box<Expr>>,
     ) -> Result<Value, Interrupt> {
-        if self.top_scope_mut().locals.contains_key(ident) {
+        if self.top_scope().contains(ident) {
             return Err(Interrupt::Error(Error::redeclaration_of_variable(pos)));
         }
 
@@ -576,24 +583,14 @@ impl Context {
             None => Value::Null,
         };
 
-        self.top_scope_mut().locals.insert(ident.clone(), value);
+        self.top_scope().set(ident.clone(), value);
 
         Ok(Value::Null)
     }
 
     #[inline]
-    fn top_scope_mut(&mut self) -> &mut Scope {
-        self.scopes.last_mut().expect("scope stack unexpectedly empty")
-    }
-}
-
-pub struct Scope {
-    pub locals: BTreeMap<String, Value>,
-}
-
-impl Scope {
-    pub fn new() -> Scope {
-        Scope { locals: BTreeMap::new() }
+    fn top_scope(&self) -> &Object {
+        self.scopes.last().expect("scope stack unexpectedly empty")
     }
 }
 

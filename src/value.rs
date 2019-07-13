@@ -10,7 +10,7 @@ pub enum Value {
     Boolean(bool),
     Array(Array),
     Object(Object),
-    Function(#[unsafe_ignore_trace] Function),
+    Function(Function),
     Null,
 }
 
@@ -49,7 +49,7 @@ impl PartialEq<Value> for Value {
             },
             Value::Function(a) => {
                 match other {
-                    Value::Function(b) => Rc::ptr_eq(&a.0, &b.0),
+                    Value::Function(b) => Rc::ptr_eq(&a.def, &b.def),
                     _ => false,
                 }
             },
@@ -68,8 +68,8 @@ impl Value {
         Value::String(ImmutableString::new(string))
     }
 
-    pub fn function(def: Rc<FunctionDef>) -> Value {
-        Value::Function(Function(def))
+    pub fn function(scopes: Vec<Object>, def: Rc<FunctionDef>) -> Value {
+        Value::Function(Function { scopes, def })
     }
 
     pub fn array(values: Vec<Value>) -> Value {
@@ -106,12 +106,20 @@ impl ImmutableString {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct Function(Rc<FunctionDef>);
+#[derive(Clone, Debug, Trace, Finalize)]
+pub struct Function {
+    scopes: Vec<Object>,
+    #[unsafe_ignore_trace]
+    def: Rc<FunctionDef>,
+}
 
 impl Function {
+    pub fn scopes(&self) -> &[Object] {
+        self.scopes.as_slice()
+    }
+
     pub fn def(&self) -> &FunctionDef {
-        &*self.0
+        &*self.def
     }
 }
 
@@ -156,5 +164,9 @@ impl Object {
 
     pub fn get(&self, key: &str) -> Option<Value> {
         self.0.borrow().get(key).cloned()
+    }
+
+    pub fn contains(&self, key: &str) -> bool {
+        self.0.borrow().contains_key(key)
     }
 }
