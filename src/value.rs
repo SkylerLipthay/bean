@@ -1,7 +1,9 @@
-use crate::parser::FunctionDef;
-use std::collections::BTreeMap;
-use std::rc::Rc;
+use crate::context::Context;
+use crate::parser::FunctionBean;
 use gc::{Gc, GcCell};
+use std::collections::BTreeMap;
+use std::fmt;
+use std::rc::Rc;
 
 #[derive(Clone, Debug, Trace, Finalize)]
 pub enum Value {
@@ -49,7 +51,7 @@ impl PartialEq<Value> for Value {
             },
             Value::Function(a) => {
                 match other {
-                    Value::Function(b) => Rc::ptr_eq(&a.def, &b.def),
+                    Value::Function(b) => Rc::ptr_eq(&a.kind, &b.kind),
                     _ => false,
                 }
             },
@@ -64,12 +66,22 @@ impl PartialEq<Value> for Value {
 }
 
 impl Value {
-    pub fn string(string: String) -> Value {
-        Value::String(ImmutableString::new(string))
+    pub fn string<S: Into<String>>(string: S) -> Value {
+        Value::String(ImmutableString::new(string.into()))
     }
 
-    pub fn function(scopes: Vec<Object>, def: Rc<FunctionDef>) -> Value {
-        Value::Function(Function { scopes, def })
+    pub fn function(scopes: Vec<Object>, kind: Rc<FunctionKind>) -> Value {
+        Value::Function(Function { scopes, kind })
+    }
+
+    pub fn rust_function<F>(func: F) -> Value
+    where
+        F: Fn(&mut Context, Vec<Value>) -> Result<Value, Value> + 'static,
+    {
+        Value::Function(Function {
+            scopes: Vec::new(),
+            kind: Rc::new(FunctionKind::Rust(Box::new(func))),
+        })
     }
 
     pub fn array(values: Vec<Value>) -> Value {
@@ -106,11 +118,31 @@ impl ImmutableString {
     }
 }
 
-#[derive(Clone, Debug, Trace, Finalize)]
+#[derive(Clone, Trace, Finalize)]
 pub struct Function {
+    // Unused for `FunctionKind::Rust` functions:
     scopes: Vec<Object>,
     #[unsafe_ignore_trace]
-    def: Rc<FunctionDef>,
+    kind: Rc<FunctionKind>,
+}
+
+impl fmt::Debug for Function {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "function")
+    }
+}
+
+pub enum FunctionKind {
+    Rust(FunctionRust),
+    Bean(FunctionBean),
+}
+
+pub type FunctionRust = Box<Fn(&mut Context, Vec<Value>) -> Result<Value, Value>>;
+
+impl fmt::Debug for FunctionKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "function")
+    }
 }
 
 impl Function {
@@ -118,8 +150,8 @@ impl Function {
         self.scopes.as_slice()
     }
 
-    pub fn def(&self) -> &FunctionDef {
-        &*self.def
+    pub fn kind(&self) -> &FunctionKind {
+        &*self.kind
     }
 }
 
@@ -158,8 +190,8 @@ impl Object {
         Object(Gc::new(GcCell::new(BTreeMap::new())))
     }
 
-    pub fn set(&self, key: String, value: Value) {
-        self.0.borrow_mut().insert(key, value);
+    pub fn set<S: Into<String>>(&self, key: S, value: Value) {
+        self.0.borrow_mut().insert(key.into(), value);
     }
 
     pub fn get(&self, key: &str) -> Option<Value> {

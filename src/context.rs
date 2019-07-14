@@ -1,7 +1,7 @@
 use crate::error::Error;
-use crate::parser::{Block, Expr, ExprKind as EK, Parser};
+use crate::parser::{Block, Expr, ExprKind as EK, FunctionBean, Parser};
 use crate::position::Position;
-use crate::value::{ImmutableString, Function, Object, Value};
+use crate::value::{ImmutableString, Function, FunctionRust, FunctionKind, Object, Value};
 use std::collections::BTreeMap;
 use std::mem;
 
@@ -124,6 +124,10 @@ impl Context {
 
     pub fn eval(&mut self, source: &str) -> Result<Value, Error> {
         Ok(self.eval_block(&Parser::parse_script(source)?)?)
+    }
+
+    pub fn call_function(&mut self, func: &Function, vals: Vec<Value>) -> Result<Value, Value> {
+        Ok(self.eval_call_inner_vals(func, vals)?)
     }
 
     fn eval_block(&mut self, block: &Block) -> Result<Value, Interrupt> {
@@ -418,10 +422,9 @@ impl Context {
             _ => return Err(Interrupt::Error(Error::bad_iter(position))),
         };
 
-        let args = Vec::new();
-
+        let empty_args = Vec::new();
         loop {
-            let object_val = self.eval_call_inner(next, &args)?;
+            let object_val = self.eval_call_inner_exprs(next, &empty_args)?;
             let object = match object_val {
                 Value::Object(ref object) => object,
                 _ => return Err(Interrupt::Error(Error::bad_iter_next(position))),
@@ -503,27 +506,58 @@ impl Context {
         // the error is "localized" to the caller's location (i.e. the line/column point to `pos`).
         let func = self.eval_expr(func)?;
         if let Value::Function(ref func) = func {
-            self.eval_call_inner(func, args)
+            self.eval_call_inner_exprs(func, args)
         } else {
             Err(Interrupt::Error(Error::not_a_function(pos)))
         }
     }
 
-    fn eval_call_inner(&mut self, func: &Function, args: &Vec<Expr>) -> Result<Value, Interrupt> {
+    fn eval_call_inner_exprs(
+        &mut self,
+        func: &Function,
+        args: &Vec<Expr>,
+    ) -> Result<Value, Interrupt> {
+        let mut vals = Vec::with_capacity(args.len());
+        for arg in args {
+            vals.push(self.eval_expr(arg)?);
+        }
+
+        self.eval_call_inner_vals(func, vals)
+    }
+
+    fn eval_call_inner_vals(
+        &mut self,
+        func: &Function,
+        vals: Vec<Value>,
+    ) -> Result<Value, Interrupt> {
+        match func.kind() {
+            FunctionKind::Bean(bean_func) => self.eval_call_bean(bean_func, func.scopes(), vals),
+            FunctionKind::Rust(rust_func) => self.eval_call_rust(rust_func, vals),
+        }
+    }
+
+    fn eval_call_bean(
+        &mut self,
+        func: &FunctionBean,
+        scopes: &[Object],
+        mut vals: Vec<Value>,
+    ) -> Result<Value, Interrupt> {
         let scope = Object::new();
-        for (index, param) in func.def().params.iter().enumerate() {
-            let arg = match args.get(index) {
-                Some(expr) => self.eval_expr(expr)?,
-                None => Value::Null,
+        for param in func.params.iter() {
+            let val = if vals.len() > 0 {
+                vals.remove(0)
+            } else {
+                Value::Null
             };
-            scope.set(param.clone(), arg);
+
+            scope.set(param.clone(), val);
         }
 
         // Restore the original scope stack at the declaration site of the function:
-        let ctx_scopes = mem::replace(&mut self.scopes, func.scopes().to_vec());
+        let ctx_scopes = mem::replace(&mut self.scopes, scopes.to_vec());
         self.scopes.push(scope);
 
-        let result = match self.eval_expr(&func.def().body) {
+        let result = match self.eval_expr(&func.body) {
             Ok(value) => Ok(value),
             Err(Interrupt::Return { value, .. }) => Ok(match value {
                 Some(value) => value,
@@ -541,6 +575,14 @@ impl Context {
         self.scopes = ctx_scopes;
 
         result
+    }
+
+    fn eval_call_rust(
+        &mut self,
+        func: &FunctionRust,
+        vals: Vec<Value>,
+    ) -> Result<Value, Interrupt> {
+        func(self, vals).map_err(|val| Interrupt::Error(val))
     }
 
     fn eval_bool_or(&mut self, a: &Expr, b: &Expr) -> Result<Value, Interrupt> {
@@ -616,11 +658,18 @@ pub enum Interrupt {
 
 impl From<Interrupt> for Error {
     fn from(interrupt: Interrupt) -> Error {
+        let value: Value = interrupt.into();
+        Error::Runtime(value)
+    }
+}
+
+impl From<Interrupt> for Value {
+    fn from(interrupt: Interrupt) -> Value {
         match interrupt {
-            Interrupt::Break { position, .. } => Error::Runtime(Error::bad_break(position)),
-            Interrupt::Continue { position, .. } => Error::Runtime(Error::bad_continue(position)),
-            Interrupt::Return { position, .. } => Error::Runtime(Error::bad_return(position)),
-            Interrupt::Error(value) => Error::Runtime(value),
+            Interrupt::Break { position, .. } => Error::bad_break(position),
+            Interrupt::Continue { position, .. } => Error::bad_continue(position),
+            Interrupt::Return { position, .. } => Error::bad_return(position),
+            Interrupt::Error(value) => value,
         }
     }
 }

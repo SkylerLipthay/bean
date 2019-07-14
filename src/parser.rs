@@ -2,13 +2,14 @@ use crate::error::{Error, ParserError, ParserErrorKind as PEK};
 use crate::iter::MultiPeek;
 use crate::lexer::{TokenIterator, Token, TokenKind as TK};
 use crate::position::Position;
+use crate::value::FunctionKind;
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use ExprKind as EK;
 
 #[derive(Clone, Debug)]
-pub struct FunctionDef {
+pub struct FunctionBean {
     pub params: Vec<String>,
     pub body: Box<Expr>,
 }
@@ -33,7 +34,7 @@ pub enum ExprKind {
 
     // Primary:
     Identifier(String),
-    Function(Rc<FunctionDef>),
+    Function(Rc<FunctionKind>),
     Boolean(bool),
     Number(f64),
     String(String),
@@ -447,7 +448,7 @@ fn parse_function<'a>(parser: &mut Parser<'a>, skip_params: bool) -> Result<EK, 
         parse_expr(parser)?
     };
 
-    Ok(EK::Function(Rc::new(FunctionDef { params, body: Box::new(body) })))
+    Ok(EK::Function(Rc::new(FunctionKind::Bean(FunctionBean { params, body: Box::new(body) }))))
 }
 
 fn is_next_curly_pair<'a>(parser: &mut Parser<'a>) -> Result<bool, Error> {

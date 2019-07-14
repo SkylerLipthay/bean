@@ -75,9 +75,9 @@ impl Error {
 
     pub fn runtime(pos: Position, message: String) -> Value {
         let object = Object::new();
-        object.set("message".into(), Value::string(message));
-        object.set("line".into(), Value::Number(pos.line as f64));
-        object.set("column".into(), Value::Number(pos.column as f64));
+        object.set("message", Value::string(message));
+        object.set("line", Value::Number(pos.line as f64));
+        object.set("column", Value::Number(pos.column as f64));
         Value::Object(object)
     }
 }
