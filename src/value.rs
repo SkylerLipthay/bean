@@ -179,6 +179,10 @@ impl Array {
     pub fn get(&self, index: usize) -> Option<Value> {
         self.0.borrow().get(index).cloned()
     }
+
+    pub fn len(&self) -> usize {
+        self.0.borrow().len()
+    }
 }
 
 #[derive(Clone, Debug, Trace, Finalize)]
@@ -200,5 +204,9 @@ impl Object {
 
     pub fn contains(&self, key: &str) -> bool {
         self.0.borrow().contains_key(key)
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.borrow().len()
     }
 }

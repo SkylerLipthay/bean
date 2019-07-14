@@ -122,6 +122,10 @@ impl Context {
         Context { scopes: Vec::new() }
     }
 
+    pub fn push_scope(&mut self, scope: Object) {
+        self.scopes.push(scope);
+    }
+
     pub fn eval(&mut self, source: &str) -> Result<Value, Error> {
         Ok(self.eval_block(&Parser::parse_script(source)?)?)
     }
@@ -504,6 +508,9 @@ impl Context {
         // function was not defined in the current script. May have to accept a filename parameter
         // to disambiguate, or come up with another solution. Perhaps if no filename is supplied,
         // the error is "localized" to the caller's location (i.e. the line/column point to `pos`).
+        //
+        // Moreover, errors produced by native Rust functions are never tagged with a line/column.
+        // Can this be improved?
         let func = self.eval_expr(func)?;
         if let Value::Function(ref func) = func {
             self.eval_call_inner_exprs(func, args)
