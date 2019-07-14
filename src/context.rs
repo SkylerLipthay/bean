@@ -58,6 +58,12 @@ macro_rules! op_infix {
     };
 }
 
+macro_rules! op_assn {
+    ($cast:ty, $operator:tt) => {
+        |ctx, pos, lhs, rhs| op_infix!(ctx, pos, lhs, rhs, $cast, $operator)
+    };
+}
+
 macro_rules! op_inequality {
     ($self:expr, $pos:expr, $a:expr, $b:expr, $operator:tt) => {
         {
@@ -197,19 +203,17 @@ impl Context {
             EK::BitAnd(a, b) => op_infix!(self, pos, a, b, u64, &),
             EK::BitXor(a, b) => op_infix!(self, pos, a, b, u64, ^),
 
-            EK::Assign(lhs, rhs) => self.eval_assign(pos, lhs, rhs),
-            // LeftShiftAssign
-            // RightShiftAssign
-            // PlusAssign
-            // MinusAssign
-            // MultiplyAssign
-            // DivideAssign
-            // ModuloAssign
-            // OrAssign
-            // AndAssign
-            // XorAssign
-
-            _ => unimplemented!(),
+            EK::Assign(l, r) => self.eval_assign(pos, l, r, |ctx, _, _, rhs| ctx.eval_expr(rhs)),
+            EK::LeftShiftAssign(l, r) => self.eval_assign(pos, l, r, op_assn!(u64, <<)),
+            EK::RightShiftAssign(l, r) => self.eval_assign(pos, l, r, op_assn!(u64, >>)),
+            EK::PlusAssign(l, r) => self.eval_assign(pos, l, r, op_assn!(f64, +)),
+            EK::MinusAssign(l, r) => self.eval_assign(pos, l, r, op_assn!(f64, -)),
+            EK::MultiplyAssign(l, r) => self.eval_assign(pos, l, r, op_assn!(f64, *)),
+            EK::DivideAssign(l, r) => self.eval_assign(pos, l, r, op_assn!(f64, /)),
+            EK::ModuloAssign(l, r) => self.eval_assign(pos, l, r, op_assn!(f64, %)),
+            EK::OrAssign(l, r) => self.eval_assign(pos, l, r, op_assn!(u64, |)),
+            EK::AndAssign(l, r) => self.eval_assign(pos, l, r, op_assn!(u64, &)),
+            EK::XorAssign(l, r) => self.eval_assign(pos, l, r, op_assn!(u64, ^)),
         }
     }
 
@@ -247,18 +251,27 @@ impl Context {
         }
     }
 
-    fn eval_assign(&mut self, pos: Position, lhs: &Expr, rhs: &Expr) -> Result<Value, Interrupt> {
+    fn eval_assign<F>(
+        &mut self,
+        pos: Position,
+        lhs: &Expr,
+        rhs: &Expr,
+        value_fn: F,
+    ) -> Result<Value, Interrupt>
+    where
+        F: Fn(&mut Context, Position, &Expr, &Expr) -> Result<Value, Interrupt>,
+    {
         match &lhs.kind {
             EK::Identifier(ident) => {
                 let scope_index = self.resolve_scope_index(lhs.position, ident)?;
-                let value = self.eval_expr(rhs)?;
+                let value = value_fn(self, pos, lhs, rhs)?;
                 self.scopes[scope_index].set(ident.clone(), value.clone());
                 Ok(value)
             },
             EK::Dot(expr, ident) => {
                 match self.eval_expr(expr)? {
                     Value::Object(ref object) => {
-                        let value = self.eval_expr(rhs)?;
+                        let value = value_fn(self, pos, lhs, rhs)?;
                         object.set(ident.clone(), value.clone());
                         Ok(value)
                     },
@@ -269,13 +282,13 @@ impl Context {
                 match self.eval_expr(expr)? {
                     Value::Object(ref object) => {
                         let key = self.eval_object_index(expr.position, key)?.to_string();
-                        let value = self.eval_expr(rhs)?;
+                        let value = value_fn(self, pos, lhs, rhs)?;
                         object.set(key, value.clone());
                         Ok(value)
                     },
                     Value::Array(ref array) => {
                         let index = self.eval_array_index(expr.position, key)?;
-                        let value = self.eval_expr(rhs)?;
+                        let value = value_fn(self, pos, lhs, rhs)?;
                         array.set(index, value.clone());
                         Ok(value)
                     },
