@@ -51,7 +51,7 @@ impl PartialEq<Value> for Value {
             },
             Value::Function(a) => {
                 match other {
-                    Value::Function(b) => Rc::ptr_eq(&a.kind, &b.kind),
+                    Value::Function(b) => a == b,
                     _ => false,
                 }
             },
@@ -70,17 +70,14 @@ impl Value {
         Value::String(ImmutableString::new(string.into()))
     }
 
-    pub fn function(scopes: Vec<Object>, kind: Rc<FunctionKind>) -> Value {
-        Value::Function(Function { scopes, kind })
+    pub fn bean_function(scopes: Vec<Object>, func: Rc<FunctionBean>) -> Value {
+        Value::Function(Function { scopes, kind: FunctionKind::Bean(func) })
     }
 
-    pub fn rust_function<F>(func: F) -> Value
-    where
-        F: Fn(&mut Context, Vec<Value>) -> Result<Value, Value> + 'static,
-    {
+    pub fn rust_function(func: FunctionRust, udata: Option<Value>) -> Value {
         Value::Function(Function {
             scopes: Vec::new(),
-            kind: Rc::new(FunctionKind::Rust(Box::new(func))),
+            kind: FunctionKind::Rust { func, udata: udata.map(|udata| Box::new(udata)) },
         })
     }
 
@@ -122,8 +119,7 @@ impl ImmutableString {
 pub struct Function {
     // Unused for `FunctionKind::Rust` functions:
     scopes: Vec<Object>,
-    #[unsafe_ignore_trace]
-    kind: Rc<FunctionKind>,
+    kind: FunctionKind,
 }
 
 impl fmt::Debug for Function {
@@ -132,12 +128,40 @@ impl fmt::Debug for Function {
     }
 }
 
-pub enum FunctionKind {
-    Rust(FunctionRust),
-    Bean(FunctionBean),
+impl PartialEq<Function> for Function {
+    fn eq(&self, other: &Function) -> bool {
+        match &self.kind {
+            FunctionKind::Rust { func: fa, udata: va } => {
+                match &other.kind {
+                    FunctionKind::Rust { func: fb, udata: vb } => {
+                        let same_fn = fa as *const _ == fb as *const _;
+                        let same_val = va == vb;
+                        same_fn && same_val
+                    },
+                    _ => false,
+                }
+            },
+            FunctionKind::Bean(a) => {
+                match &other.kind {
+                    FunctionKind::Bean(b) => Rc::ptr_eq(&a, &b),
+                    _ => false,
+                }
+            }
+        }
+    }
 }
 
-pub type FunctionRust = Box<Fn(&mut Context, Vec<Value>) -> Result<Value, Value>>;
+#[derive(Clone, Trace, Finalize)]
+pub enum FunctionKind {
+    Rust {
+        udata: Option<Box<Value>>,
+        #[unsafe_ignore_trace]
+        func: FunctionRust,
+    },
+    Bean(#[unsafe_ignore_trace] Rc<FunctionBean>),
+}
+
+pub type FunctionRust = fn(&mut Context, Option<Value>, Vec<Value>) -> Result<Value, Value>;
 
 impl fmt::Debug for FunctionKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -151,7 +175,7 @@ impl Function {
     }
 
     pub fn kind(&self) -> &FunctionKind {
-        &*self.kind
+        &self.kind
     }
 }
 

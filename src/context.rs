@@ -166,7 +166,7 @@ impl Context {
             EK::Let(ident, value) => self.eval_let(pos, ident, value),
 
             EK::Identifier(ident) => self.eval_identifier(pos, ident),
-            EK::Function(def) => Ok(Value::function(self.scopes.clone(), def.clone())),
+            EK::Function(def) => Ok(Value::bean_function(self.scopes.clone(), def.clone())),
             EK::Boolean(value) => Ok(Value::Boolean(*value)),
             EK::Number(value) => Ok(Value::Number(*value)),
             EK::String(value) => Ok(Value::string(value.clone())),
@@ -539,7 +539,9 @@ impl Context {
     ) -> Result<Value, Interrupt> {
         match func.kind() {
             FunctionKind::Bean(bean_func) => self.eval_call_bean(bean_func, func.scopes(), vals),
-            FunctionKind::Rust(rust_func) => self.eval_call_rust(rust_func, vals),
+            FunctionKind::Rust { func, udata } => {
+                self.eval_call_rust(func, udata.clone().map(|u| *u), vals)
+            },
         }
     }
 
@@ -587,9 +589,10 @@ impl Context {
     fn eval_call_rust(
         &mut self,
         func: &FunctionRust,
+        udata: Option<Value>,
         vals: Vec<Value>,
     ) -> Result<Value, Interrupt> {
-        func(self, vals).map_err(|val| Interrupt::Error(val))
+        func(self, udata, vals).map_err(|val| Interrupt::Error(val))
     }
 
     fn eval_bool_or(&mut self, a: &Expr, b: &Expr) -> Result<Value, Interrupt> {
