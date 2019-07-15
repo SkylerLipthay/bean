@@ -130,6 +130,22 @@ impl Context {
         Ok(self.eval_block(&Parser::parse_script(source)?)?)
     }
 
+    pub fn eval_with_scope(
+        &mut self,
+        source: &str,
+        scope: Object,
+    ) -> (Object, Result<Value, Error>) {
+        let block = match Parser::parse_script(source) {
+            Ok(block) => block,
+            Err(err) => return (scope, Err(err)),
+        };
+
+        self.scopes.push(scope);
+        let result = self.eval_block_no_scope(&block);
+        let scope = self.scopes.pop();
+        (scope.expect("scope stack unexpectedly empty"), result.map_err(|e| e.into()))
+    }
+
     pub fn call_function(&mut self, func: &Function, vals: Vec<Value>) -> Result<Value, Value> {
         Ok(self.eval_call_inner_vals(func, vals)?)
     }

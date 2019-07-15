@@ -7,3 +7,7 @@ edition = "2018"
 [dependencies]
 gc = "0.3"
 gc_derive = "0.3"
+
+[dev-dependencies]
+ansi_term = "0.11"
+rustyline = "1.0"

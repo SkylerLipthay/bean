@@ -4,6 +4,8 @@ Bean is a simple, dynamically typed, garbage collected, embedded scripting langu
 
 This project is very much immature. Production usage is heavily discouraged.
 
+To play around, clone this repository and run `cargo run --release --example repl`!
+
 ## Sample
 
 ```
