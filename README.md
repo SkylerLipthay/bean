@@ -8,7 +8,7 @@ To play around, clone this repository and run `cargo run --release --example rep
 
 ## Sample
 
-```
+```rust
 // Variables are declared using `let`.
 let x = 12.34;
 
