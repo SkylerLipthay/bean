@@ -73,7 +73,9 @@ let double_each = |array| {
     next: || if index >= std.len(array) {
       { done: true }
     } else {
-      { value: array[index] * 2 }
+      let result = { value: array[index] * 2 };
+      index += 1;
+      result
     }
   }
 };
