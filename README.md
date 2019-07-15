@@ -144,11 +144,15 @@ Bean provides built-in functionality accessed through the `std` object.
 
 ...The standard library needs a lot of work! It should eventually include all of the usual functionality to operate on all of the types.
 
+## Prior art
+
+Many thanks to [Rhai](https://github.com/jonathandturner/rhai) and the other [Rust-based scripting languages](https://github.com/rust-unofficial/awesome-rust#scripting) for inspiration!
+
 ## Future work
 
 * The idea of running untrusted code is currently a pipe dream. It requires at least two measures:
   * Execution timeout mechanism. This is entirely possible to implement today.
-  * Memory allocation limitation. Significantly more difficult than the former. at the very least it would require custom implementations of `BTreeMap`, `Vec`, and `String` (as of writing, Rust's type-level custom allocator story is missing).
+  * Memory allocation limitation. Significantly more difficult than the former. At the very least it would require custom implementations of `BTreeMap`, `Vec`, and `String` (as of writing, Rust's type-level custom allocator story is missing).
 * More ergonomic Rust-Bean bridging via capturing closures would be nice. As it stands, `rust-gc` has no way of tracing into closures.
 * String interning would be nice.
 * JIT would be nice.
