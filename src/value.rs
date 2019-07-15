@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::rc::Rc;
 
-#[derive(Clone, Debug, Trace, Finalize)]
+#[derive(Clone, Trace, Finalize)]
 pub enum Value {
     Number(f64),
     String(#[unsafe_ignore_trace] ImmutableString),
@@ -65,6 +65,20 @@ impl PartialEq<Value> for Value {
     }
 }
 
+impl fmt::Debug for Value {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Value::Number(v) => write!(f, "{}", v),
+            Value::String(v) => write!(f, "{:?}", v),
+            Value::Boolean(v) => write!(f, "{:?}", v),
+            Value::Array(v) => write!(f, "{:?}", v),
+            Value::Object(v) => write!(f, "{:?}", v),
+            Value::Function(v) => write!(f, "{:?}", v),
+            Value::Null => write!(f, "null"),
+        }
+    }
+}
+
 impl Value {
     pub fn string<S: Into<String>>(string: S) -> Value {
         Value::String(ImmutableString::new(string.into()))
@@ -98,7 +112,7 @@ impl Value {
     }
 }
 
-#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ImmutableString(Rc<String>);
 
 impl ImmutableString {
@@ -115,6 +129,12 @@ impl ImmutableString {
     }
 }
 
+impl fmt::Debug for ImmutableString {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self.as_str())
+    }
+}
+
 #[derive(Clone, Trace, Finalize)]
 pub struct Function {
     // Unused for `FunctionKind::Rust` functions:
@@ -124,7 +144,7 @@ pub struct Function {
 
 impl fmt::Debug for Function {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "function")
+        write!(f, "{:?}", self.kind)
     }
 }
 
@@ -165,7 +185,10 @@ pub type FunctionRust = fn(&mut Context, Option<Value>, Vec<Value>) -> Result<Va
 
 impl fmt::Debug for FunctionKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "function")
+        match self {
+            FunctionKind::Rust { .. } => write!(f, "<rust function>"),
+            FunctionKind::Bean(_) => write!(f, "<bean function>"),
+        }
     }
 }
 
@@ -179,7 +202,7 @@ impl Function {
     }
 }
 
-#[derive(Clone, Debug, Trace, Finalize)]
+#[derive(Clone, Trace, Finalize)]
 pub struct Array(Gc<GcCell<Vec<Value>>>);
 
 impl Array {
@@ -209,7 +232,13 @@ impl Array {
     }
 }
 
-#[derive(Clone, Debug, Trace, Finalize)]
+impl fmt::Debug for Array {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self.0.borrow())
+    }
+}
+
+#[derive(Clone, Trace, Finalize)]
 pub struct Object(Gc<GcCell<BTreeMap<String, Value>>>);
 
 // TODO: Allow for storing hidden values accessible only in Rust.
@@ -232,5 +261,11 @@ impl Object {
 
     pub fn len(&self) -> usize {
         self.0.borrow().len()
+    }
+}
+
+impl fmt::Debug for Object {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self.0.borrow())
     }
 }

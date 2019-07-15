@@ -14,5 +14,5 @@ fn main() {
     let result = context.eval(&buffer);
     let elapsed = SystemTime::now().duration_since(before).unwrap();
     println!("Total execution time: {:?}", elapsed);
-    println!("{:#?}", result);
+    println!("{:?}", result);
 }
