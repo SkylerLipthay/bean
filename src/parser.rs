@@ -402,13 +402,16 @@ fn parse_let<'a>(parser: &mut Parser<'a>) -> Result<EK, Error> {
 
     let ident = expect_next!(parser, Some(TK::Identifier(ident)) => ident);
 
-    if let Some(TK::Assign) = parser.peek_token(0)? {
+    let initial_value = if let Some(TK::Assign) = parser.peek_token(0)? {
         parser.next_token()?;
+        Some(Box::new(parse_expr(parser)?))
     } else {
-        return Ok(EK::Let(ident, None));
-    }
+        None
+    };
 
-    Ok(EK::Let(ident, Some(Box::new(parse_expr(parser)?))))
+    expect_semicolon(parser)?;
+
+    Ok(EK::Let(ident, initial_value))
 }
 
 fn parse_function<'a>(parser: &mut Parser<'a>, skip_params: bool) -> Result<EK, Error> {
