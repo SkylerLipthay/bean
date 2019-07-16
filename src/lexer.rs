@@ -83,14 +83,28 @@ pub struct TokenIterator<'a> {
 
 impl<'a> TokenIterator<'a> {
     pub fn new(script: &'a str) -> TokenIterator<'a> {
-        TokenIterator {
+        let mut iter = TokenIterator {
             chars: CharsWithPosition::new(script.chars()),
             position: Position { line: 1, column: 0 },
-        }
+        };
+
+        // Prepare `next_pos`.
+        iter.munch_whitespace();
+        iter
     }
 
+    // Returns the position of the first character of the next token (or EOF).
     pub fn next_pos(&self) -> Position {
         self.chars.next_pos()
+    }
+
+    fn munch_whitespace(&mut self) {
+        loop {
+            match self.chars.peek(0) {
+                Some(c) if c.is_whitespace() => self.chars.next(),
+                _ => break,
+            };
+        }
     }
 
     fn inner_next(&mut self) -> Result<Option<TK>, LexerErrorKind> {
@@ -130,12 +144,9 @@ impl<'a> TokenIterator<'a> {
             // Peek ahead and consume any whitespace until the next token. This is important so that
             // `TokenIterator::next_pos()` indicates the position of the start of the next token and
             // not the next whitespace character.
-            loop {
-                match self.chars.peek(0) {
-                    Some(c) if c.is_whitespace() => self.chars.next(),
-                    _ => return Ok(Some(kind)),
-                };
-            }
+            self.munch_whitespace();
+
+            return Ok(Some(kind));
         }
 
         Ok(None)

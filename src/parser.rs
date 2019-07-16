@@ -102,11 +102,10 @@ pub struct Parser<'a> {
 
 impl<'a> Parser<'a> {
     pub fn parse_script(script: &str) -> Result<Block, Error> {
-        parse_script(&mut Parser {
-            tokens: MultiPeek::new(TokenIterator::new(script)),
-            prev_pos: Position { line: 1, column: 0 },
-            next_pos: Position { line: 1, column: 1 },
-        })
+        let tokens = MultiPeek::new(TokenIterator::new(script));
+        let prev_pos = Position { line: 1, column: 0 };
+        let next_pos = tokens.inner().next_pos();
+        parse_script(&mut Parser { tokens, prev_pos, next_pos })
     }
 
     fn next_token(&mut self) -> Result<Option<TK>, Error> {
