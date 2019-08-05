@@ -155,7 +155,7 @@ Many thanks to [Rhai](https://github.com/jonathandturner/rhai) and the other [Ru
 * The idea of running untrusted code is currently a pipe dream. It requires at least two measures:
   * Execution timeout mechanism. This is entirely possible to implement today.
   * Memory allocation limitation. Significantly more difficult than the former. At the very least it would require custom implementations of `BTreeMap`, `Vec`, and `String` (as of writing, Rust's type-level custom allocator story is missing).
-* More ergonomic Rust-Bean bridging via capturing closures would be nice. As it stands, `rust-gc` has no way of tracing into closures.
+* More ergonomic Rust-Bean bridging via capturing closures would be nice. As it stands, there is no way of tracing into closures.
 * String interning would be nice.
 * JIT would be nice.
 * Eventually it'd be nice to have an analog to JavaScript's `this` for function calls. Along with this, function calls on built-ins would be nice, so as to facilitate e.g. `array.iter().sum()` in place of `std.sum(std.iter(array))`.

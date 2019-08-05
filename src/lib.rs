@@ -1,6 +1,4 @@
-#[macro_use]
-extern crate gc_derive;
-extern crate gc;
+extern crate bacon_rajan_cc;
 
 pub mod context;
 pub mod error;

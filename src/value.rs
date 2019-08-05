@@ -1,14 +1,15 @@
 use crate::context::Context;
 use crate::parser::FunctionBean;
-use gc::{Gc, GcCell};
+use bacon_rajan_cc::{Cc, Trace, Tracer};
 use std::collections::BTreeMap;
+use std::cell::RefCell;
 use std::fmt;
 use std::rc::Rc;
 
-#[derive(Clone, Trace, Finalize)]
+#[derive(Clone)]
 pub enum Value {
     Number(f64),
-    String(#[unsafe_ignore_trace] ImmutableString),
+    String(ImmutableString),
     Boolean(bool),
     Array(Array),
     Object(Object),
@@ -96,11 +97,11 @@ impl Value {
     }
 
     pub fn array(values: Vec<Value>) -> Value {
-        Value::Array(Array(Gc::new(GcCell::new(values))))
+        Value::Array(Array(Cc::new(RefCell::new(values))))
     }
 
     pub fn object(values: BTreeMap<String, Value>) -> Value {
-        Value::Object(Object(Gc::new(GcCell::new(values))))
+        Value::Object(Object(Cc::new(RefCell::new(values))))
     }
 
     pub fn coerce_bool(&self) -> bool {
@@ -109,6 +110,17 @@ impl Value {
             Value::Null => false,
             _ => true,
         }
+    }
+}
+
+impl Trace for Value {
+    fn trace(&mut self, tracer: &mut Tracer) {
+        match self {
+            Value::Array(inner) => inner.trace(tracer),
+            Value::Object(inner) => inner.trace(tracer),
+            Value::Function(inner) => inner.trace(tracer),
+            _ => {},
+        };
     }
 }
 
@@ -135,7 +147,7 @@ impl fmt::Debug for ImmutableString {
     }
 }
 
-#[derive(Clone, Trace, Finalize)]
+#[derive(Clone)]
 pub struct Function {
     // Unused for `FunctionKind::Rust` functions:
     scopes: Vec<Object>,
@@ -171,14 +183,22 @@ impl PartialEq<Function> for Function {
     }
 }
 
-#[derive(Clone, Trace, Finalize)]
+impl Trace for Function {
+    fn trace(&mut self, tracer: &mut Tracer) {
+        match self.kind {
+            FunctionKind::Rust { ref mut udata, .. } => udata.trace(tracer),
+            _ => {},
+        };
+    }
+}
+
+#[derive(Clone)]
 pub enum FunctionKind {
     Rust {
         udata: Option<Box<Value>>,
-        #[unsafe_ignore_trace]
         func: FunctionRust,
     },
-    Bean(#[unsafe_ignore_trace] Rc<FunctionBean>),
+    Bean(Rc<FunctionBean>),
 }
 
 pub type FunctionRust = fn(&mut Context, Option<Value>, Vec<Value>) -> Result<Value, Value>;
@@ -202,12 +222,12 @@ impl Function {
     }
 }
 
-#[derive(Clone, Trace, Finalize)]
-pub struct Array(Gc<GcCell<Vec<Value>>>);
+#[derive(Clone)]
+pub struct Array(Cc<RefCell<Vec<Value>>>);
 
 impl Array {
     pub fn new() -> Array {
-        Array(Gc::new(GcCell::new(Vec::new())))
+        Array(Cc::new(RefCell::new(Vec::new())))
     }
 
     pub fn set(&self, index: usize, value: Value) {
@@ -238,13 +258,19 @@ impl fmt::Debug for Array {
     }
 }
 
-#[derive(Clone, Trace, Finalize)]
-pub struct Object(Gc<GcCell<BTreeMap<String, Value>>>);
+impl Trace for Array {
+    fn trace(&mut self, tracer: &mut Tracer) {
+        self.0.trace(tracer);
+    }
+}
+
+#[derive(Clone)]
+pub struct Object(Cc<RefCell<BTreeMap<String, Value>>>);
 
 // TODO: Allow for storing hidden values accessible only in Rust.
 impl Object {
     pub fn new() -> Object {
-        Object(Gc::new(GcCell::new(BTreeMap::new())))
+        Object(Cc::new(RefCell::new(BTreeMap::new())))
     }
 
     pub fn set<S: Into<String>>(&self, key: S, value: Value) {
@@ -267,5 +293,11 @@ impl Object {
 impl fmt::Debug for Object {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self.0.borrow())
+    }
+}
+
+impl Trace for Object {
+    fn trace(&mut self, tracer: &mut Tracer) {
+        self.0.trace(tracer);
     }
 }

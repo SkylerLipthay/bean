@@ -23,7 +23,7 @@ pub fn scope() -> Object {
                 // TODO: Can `args` be destructured to prevent this clone?
                 iter.set("_arr", Value::Array(arr.clone()));
 
-                // TODO: Closure captures `Gc`s:
+                // TODO: Closure captures `Cc`s:
                 iter.set("next", Value::rust_function(move |_ctx, udata, _args| {
                     let iter = match udata {
                         Some(Value::Object(ref iter)) => iter,
