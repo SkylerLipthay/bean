@@ -2,6 +2,7 @@ use crate::error::Error;
 use crate::parser::{Block, Expr, ExprKind as EK, FunctionBean, Parser};
 use crate::position::Position;
 use crate::value::{ImmutableString, Function, FunctionRust, FunctionKind, Object, Value};
+use bacon_rajan_cc::collect_cycles;
 use std::collections::BTreeMap;
 use std::mem;
 
@@ -127,7 +128,9 @@ impl Context {
     }
 
     pub fn eval(&mut self, source: &str) -> Result<Value, Error> {
-        Ok(self.eval_block(&Parser::parse_script(source)?)?)
+        let result = Ok(self.eval_block(&Parser::parse_script(source)?)?);
+        collect_cycles();
+        result
     }
 
     pub fn eval_with_scope(
@@ -143,11 +146,15 @@ impl Context {
         self.scopes.push(scope);
         let result = self.eval_block_no_scope(&block);
         let scope = self.scopes.pop();
-        (scope.expect("scope stack unexpectedly empty"), result.map_err(|e| e.into()))
+        let result = (scope.expect("scope stack unexpectedly empty"), result.map_err(|e| e.into()));
+        collect_cycles();
+        result
     }
 
     pub fn call_function(&mut self, func: &Function, vals: Vec<Value>) -> Result<Value, Value> {
-        Ok(self.eval_call_inner_vals(func, vals)?)
+        let result = Ok(self.eval_call_inner_vals(func, vals)?);
+        collect_cycles();
+        result
     }
 
     fn eval_block(&mut self, block: &Block) -> Result<Value, Interrupt> {
@@ -672,6 +679,13 @@ impl Context {
     #[inline]
     fn top_scope(&self) -> &Object {
         self.scopes.last().expect("scope stack unexpectedly empty")
+    }
+}
+
+impl Drop for Context {
+    fn drop(&mut self) {
+        self.scopes.clear();
+        collect_cycles();
     }
 }
 
