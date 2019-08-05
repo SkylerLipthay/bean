@@ -4,7 +4,7 @@ extern crate rustyline;
 
 use ansi_term::Colour::{Green, Fixed, Red};
 use bean::context::Context;
-use bean::std_scope;
+use bean::stdlib;
 use bean::value::Object;
 use rustyline::{Editor, error::ReadlineError};
 use std::time::SystemTime;
@@ -16,7 +16,7 @@ fn main() {
     let mut line_offset = 0;
     let mut scope = Some(Object::new());
     let mut context = Context::new();
-    context.push_scope(std_scope::scope());
+    context.push_scope(stdlib::scope());
 
     loop {
         match rl.readline(&format!("bean:{:04}> ", line_offset + 1)) {
